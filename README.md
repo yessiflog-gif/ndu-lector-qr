@@ -1,0 +1,1 @@
+# ndu-lector-qr
