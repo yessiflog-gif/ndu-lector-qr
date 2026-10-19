@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notas de Ultratumba | Lector QR</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    body {
+      margin: 0; padding: 20px; background: #17121e;
+      color: #fff; font-family: Arial, sans-serif;
+    }
+    main { max-width: 520px; margin: auto; }
+    h1 { color: #ff8b26; font-size: 26px; }
+    p { line-height: 1.5; color: #ddd; }
+    #reader {
+      width: 100%; margin-top: 18px; background: #fff;
+      color: #111; border-radius: 12px; overflow: hidden;
+    }
+    label { display: block; margin-top: 18px; }
+    input, button {
+      box-sizing: border-box; width: 100%; padding: 14px;
+      margin-top: 8px; border-radius: 8px; font-size: 16px;
+    }
+    input { border: 1px solid #777; }
+    button {
+      border: 0; background: #ff8b26; color: #17121e;
+      font-weight: bold; cursor: pointer;
+    }
+    button:disabled { opacity: .5; }
+    #estado {
+      margin-top: 18px; padding: 14px; border-radius: 8px;
+      background: #2c2634; white-space: pre-wrap; overflow-wrap: anywhere;
+    }
+    .nota { font-size: 13px; color: #bbb; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>NOTAS DE ULTRATUMBA</h1>
+  <p>Lector oficial de boletos · Stranger Drinks</p>
+
+  <label for="operador">Nombre del encargado de acceso</label>
+  <input id="operador" placeholder="Escribe tu nombre" autocomplete="name">
+
+  <button id="iniciar">ACTIVAR CÁMARA</button>
+  <div id="reader"></div>
+
+  <div id="estado">Pulsa “Activar cámara” y permite el acceso a la cámara.</div>
+  <p class="nota">Al leer el QR, el token se enviará a la ventana del validador de Google Apps Script. No compartas capturas de los tokens.</p>
+</main>
+
+<script>
+  let lector = null;
+  let procesando = false;
+
+  const estado = document.getElementById("estado");
+  const boton = document.getElementById("iniciar");
+
+  function mostrar(mensaje) {
+    estado.textContent = mensaje;
+  }
+
+  async function iniciarCamara() {
+    if (procesando) return;
+
+    if (!window.opener || window.opener.closed) {
+      mostrar("ERROR: abre este lector desde el botón del validador de Google Apps Script. No abras esta página directamente.");
+      return;
+    }
+
+    boton.disabled = true;
+    mostrar("Solicitando acceso a la cámara…");
+
+    try {
+      lector = new Html5Qrcode("reader");
+      await lector.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        async (textoLeido) => {
+          if (procesando) return;
+          procesando = true;
+          mostrar("QR leído. Enviando token al validador…");
+
+          try {
+            await lector.stop();
+          } catch (e) {}
+
+          const operador = document.getElementById("operador").value.trim();
+
+          // El validador solo acepta mensajes procedentes del origen
+          // de esta página, configurado en ValidadorQR.html.
+          window.opener.postMessage({
+            type: "NDU_QR_TOKEN",
+            token: textoLeido.trim(),
+            operador: operador
+          }, "*");
+
+          mostrar("Token enviado.\nVuelve a la pestaña del validador para ver si el acceso fue autorizado o rechazado.");
+          boton.disabled = false;
+          boton.textContent = "ESCANEAR OTRO BOLETO";
+        },
+        () => {}
+      );
+      mostrar("Cámara activa. Coloca el QR dentro del recuadro.");
+    } catch (error) {
+      mostrar("No se pudo iniciar la cámara:\n" + (error.message || error) +
+        "\n\nAbre esta página en Safari o Chrome con HTTPS y permite el acceso a la cámara.");
+      boton.disabled = false;
+    }
+  }
+
+  boton.addEventListener("click", async () => {
+    if (lector && procesando) {
+      try { await lector.clear(); } catch (e) {}
+      lector = null;
+      procesando = false;
+      boton.textContent = "ACTIVAR CÁMARA";
+    }
+    iniciarCamara();
+  });
+</script>
+</body>
+</html>
